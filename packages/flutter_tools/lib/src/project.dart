@@ -256,14 +256,16 @@ class IosProject {
       // Info.plist has no build variables in product bundle ID.
       return fromPlist;
     }
+    if (fromPlist != null && xcode.xcodeProjectInterpreter.isInstalled) {
+      // General case: perform variable substitution using build settings.
+      final String fromXCodeVars = xcode.substituteXcodeVariables(fromPlist, buildSettings);
+      if (fromXCodeVars != null && fromPlist != fromXCodeVars )
+      return fromXCodeVars;
+    }
     final String fromPbxproj = _firstMatchInFile(xcodeProjectInfoFile, _productBundleIdPattern)?.group(2);
     if (fromPbxproj != null && (fromPlist == null || fromPlist == _productBundleIdVariable)) {
       // Common case. Avoids parsing build settings.
       return fromPbxproj;
-    }
-    if (fromPlist != null && xcode.xcodeProjectInterpreter.isInstalled) {
-      // General case: perform variable substitution using build settings.
-      return xcode.substituteXcodeVariables(fromPlist, buildSettings);
     }
     return null;
   }
