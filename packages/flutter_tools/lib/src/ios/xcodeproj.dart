@@ -18,6 +18,7 @@ import '../build_info.dart';
 import '../cache.dart';
 import '../globals.dart';
 import '../project.dart';
+import '../runner/flutter_command.dart';
 
 final RegExp _settingExpr = RegExp(r'(\w+)\s*=\s*(.*)$');
 final RegExp _varExpr = RegExp(r'\$\(([^)]*)\)');
@@ -46,8 +47,7 @@ Future<void> updateGeneratedXcodeProperties({
   localsBuffer.writeln('FLUTTER_APPLICATION_PATH=${fs.path.normalize(project.directory.path)}');
 
   // Relative to FLUTTER_APPLICATION_PATH, which is [Directory.current].
-  if (targetOverride != null)
-    localsBuffer.writeln('FLUTTER_TARGET=$targetOverride');
+  if (targetOverride != null) localsBuffer.writeln('FLUTTER_TARGET=$targetOverride');
 
   // The build outputs directory, relative to FLUTTER_APPLICATION_PATH.
   localsBuffer.writeln('FLUTTER_BUILD_DIR=${getBuildDirectory()}');
@@ -113,8 +113,7 @@ class XcodeProjectInterpreter {
       }
       _versionText = result.stdout.trim().replaceAll('\n', ', ');
       final Match match = _versionRegex.firstMatch(versionText);
-      if (match == null)
-        return;
+      if (match == null) return;
       final String version = match.group(1);
       final List<String> components = version.split('.');
       _majorVersion = int.parse(components[0]);
@@ -128,40 +127,45 @@ class XcodeProjectInterpreter {
 
   String _versionText;
   String get versionText {
-    if (_versionText == null)
-      _updateVersion();
+    if (_versionText == null) _updateVersion();
     return _versionText;
   }
 
   int _majorVersion;
   int get majorVersion {
-    if (_majorVersion == null)
-      _updateVersion();
+    if (_majorVersion == null) _updateVersion();
     return _majorVersion;
   }
 
   int _minorVersion;
   int get minorVersion {
-    if (_minorVersion == null)
-      _updateVersion();
+    if (_minorVersion == null) _updateVersion();
     return _minorVersion;
   }
 
   Map<String, String> getBuildSettings(String projectPath, String target) {
+    final BuildInfo buildInfo = FlutterCommand.current.getBuildInfo();
+    final String ios = projectPath.substring(0, projectPath.lastIndexOf('/'));
+    final XcodeProjectInfo projectInfo = xcodeProjectInterpreter.getInfo(ios);
+    final String scheme = projectInfo.schemeFor(buildInfo);
+    final String configuration = projectInfo.buildConfigurationFor(buildInfo, scheme);
     final String out = runCheckedSync(<String>[
       _executable,
       '-project',
       fs.path.absolute(projectPath),
       '-target',
       target,
-      '-showBuildSettings'
+      '-showBuildSettings',
+      '-configuration',
+      configuration
     ], workingDirectory: projectPath);
     return parseXcodeBuildSettings(out);
   }
 
   XcodeProjectInfo getInfo(String projectPath) {
     final String out = runCheckedSync(<String>[
-      _executable, '-list',
+      _executable,
+      '-list',
     ], workingDirectory: projectPath);
     return XcodeProjectInfo.fromXcodeBuildOutput(out);
   }
@@ -180,9 +184,9 @@ Map<String, String> parseXcodeBuildSettings(String showBuildSettingsOutput) {
 /// Substitutes variables in [str] with their values from the specified Xcode
 /// project and target.
 String substituteXcodeVariables(String str, Map<String, String> xcodeBuildSettings) {
+  if (xcodeBuildSettings == null || xcodeBuildSettings.isEmpty) return null;
   final Iterable<Match> matches = _varExpr.allMatches(str);
-  if (matches.isEmpty)
-    return str;
+  if (matches.isEmpty) return str;
 
   return str.replaceAllMapped(_varExpr, (Match m) => xcodeBuildSettings[m[1]] ?? m[0]);
 }
@@ -214,8 +218,7 @@ class XcodeProjectInfo {
       }
       collector?.add(line.trim());
     }
-    if (schemes.isEmpty)
-      schemes.add('Runner');
+    if (schemes.isEmpty) schemes.add('Runner');
     return XcodeProjectInfo(targets, buildConfigurations, schemes);
   }
 
@@ -226,9 +229,7 @@ class XcodeProjectInfo {
   bool get definesCustomTargets => !(targets.contains('Runner') && targets.length == 1);
   bool get definesCustomSchemes => !(schemes.contains('Runner') && schemes.length == 1);
   bool get definesCustomBuildConfigurations {
-    return !(buildConfigurations.contains('Debug') &&
-        buildConfigurations.contains('Release') &&
-        buildConfigurations.length == 2);
+    return !(buildConfigurations.contains('Debug') && buildConfigurations.contains('Release') && buildConfigurations.length == 2);
   }
 
   /// The expected scheme for [buildInfo].
@@ -256,12 +257,12 @@ class XcodeProjectInfo {
     }
     return false;
   }
+
   /// Returns unique scheme matching [buildInfo], or null, if there is no unique
   /// best match.
   String schemeFor(BuildInfo buildInfo) {
     final String expectedScheme = expectedSchemeFor(buildInfo);
-    if (schemes.contains(expectedScheme))
-      return expectedScheme;
+    if (schemes.contains(expectedScheme)) return expectedScheme;
     return _uniqueMatch(schemes, (String candidate) {
       return candidate.toLowerCase() == expectedScheme.toLowerCase();
     });
@@ -271,8 +272,7 @@ class XcodeProjectInfo {
   /// null, if there is no unique best match.
   String buildConfigurationFor(BuildInfo buildInfo, String scheme) {
     final String expectedConfiguration = expectedBuildConfigurationFor(buildInfo, scheme);
-    if (hasBuildConfiguratinForBuildMode(expectedConfiguration))
-      return expectedConfiguration;
+    if (hasBuildConfiguratinForBuildMode(expectedConfiguration)) return expectedConfiguration;
     final String baseConfiguration = _baseConfigurationFor(buildInfo);
     return _uniqueMatch(buildConfigurations, (String candidate) {
       candidate = candidate.toLowerCase();
@@ -284,10 +284,8 @@ class XcodeProjectInfo {
   }
 
   static String _baseConfigurationFor(BuildInfo buildInfo) {
-    if (buildInfo.isDebug)
-      return 'Debug';
-    if (buildInfo.isProfile)
-      return 'Profile';
+    if (buildInfo.isDebug) return 'Debug';
+    if (buildInfo.isProfile) return 'Profile';
     return 'Release';
   }
 

@@ -32,9 +32,9 @@ import 'template.dart';
 class FlutterProject {
   @visibleForTesting
   FlutterProject(this.directory, this.manifest, this._exampleManifest)
-    : assert(directory != null),
-      assert(manifest != null),
-      assert(_exampleManifest != null);
+      : assert(directory != null),
+        assert(manifest != null),
+        assert(_exampleManifest != null);
 
   /// Returns a future that completes with a [FlutterProject] view of the given directory
   /// or a ToolExit error, if `pubspec.yaml` or `example/pubspec.yaml` is invalid.
@@ -77,9 +77,7 @@ class FlutterProject {
       example.android.applicationId,
       example.ios.productBundleIdentifier,
     ];
-    return Set<String>.from(candidates
-        .map<String>(_organizationNameFromPackageName)
-        .where((String name) => name != null));
+    return Set<String>.from(candidates.map<String>(_organizationNameFromPackageName).where((String name) => name != null));
   }
 
   String _organizationNameFromPackageName(String packageName) {
@@ -109,10 +107,10 @@ class FlutterProject {
 
   /// The example sub-project of this project.
   FlutterProject get example => FlutterProject(
-    _exampleDirectory(directory),
-    _exampleManifest,
-    FlutterManifest.empty(),
-  );
+        _exampleDirectory(directory),
+        _exampleManifest,
+        FlutterManifest.empty(),
+      );
 
   /// True if this project is a Flutter module project.
   bool get isModule => manifest.isModule;
@@ -130,16 +128,14 @@ class FlutterProject {
   /// Completes with a ToolExit on validation error.
   static Future<FlutterManifest> _readManifest(String path) async {
     final FlutterManifest manifest = await FlutterManifest.createFromPath(path);
-    if (manifest == null)
-      throwToolExit('Please correct the pubspec.yaml file at $path');
+    if (manifest == null) throwToolExit('Please correct the pubspec.yaml file at $path');
     return manifest;
   }
 
   /// Generates project files necessary to make Gradle builds work on Android
   /// and CocoaPods+Xcode work on iOS, for app and module projects only.
   Future<void> ensureReadyForPlatformSpecificTooling() async {
-    if (!directory.existsSync() || hasExampleApp)
-      return;
+    if (!directory.existsSync() || hasExampleApp) return;
     refreshPluginsList(this);
     await android.ensureReadyForPlatformSpecificTooling();
     await ios.ensureReadyForPlatformSpecificTooling();
@@ -174,12 +170,12 @@ class IosProject {
   static const String _hostAppBundleName = 'Runner';
 
   Directory get _ephemeralDirectory => parent.directory.childDirectory('.ios');
+
   Directory get _editableDirectory => parent.directory.childDirectory('ios');
 
   /// This parent folder of `Runner.xcodeproj`.
   Directory get hostAppRoot {
-    if (!isModule || _editableDirectory.existsSync())
-      return _editableDirectory;
+    if (!isModule || _editableDirectory.existsSync()) return _editableDirectory;
     return _ephemeralDirectory;
   }
 
@@ -238,14 +234,15 @@ class IosProject {
       // Info.plist has no build variables in product bundle ID.
       return fromPlist;
     }
+    if (fromPlist != null && xcode.xcodeProjectInterpreter.isInstalled) {
+      // General case: perform variable substitution using build settings.
+      final String fromXCodeVars = xcode.substituteXcodeVariables(fromPlist, buildSettings);
+      if (fromXCodeVars != null && fromPlist != fromXCodeVars) return fromXCodeVars;
+    }
     final String fromPbxproj = _firstMatchInFile(xcodeProjectInfoFile, _productBundleIdPattern)?.group(2);
     if (fromPbxproj != null && (fromPlist == null || fromPlist == _productBundleIdVariable)) {
       // Common case. Avoids parsing build settings.
       return fromPbxproj;
-    }
-    if (fromPlist != null && xcode.xcodeProjectInterpreter.isInstalled) {
-      // General case: perform variable substitution using build settings.
-      return xcode.substituteXcodeVariables(fromPlist, buildSettings);
     }
     return null;
   }
@@ -257,15 +254,13 @@ class IosProject {
   ///
   /// Returns null, if iOS tooling is unavailable.
   Map<String, String> get buildSettings {
-    if (!xcode.xcodeProjectInterpreter.isInstalled)
-      return null;
+    if (!xcode.xcodeProjectInterpreter.isInstalled) return null;
     return xcode.xcodeProjectInterpreter.getBuildSettings(xcodeProject.path, _hostAppBundleName);
   }
 
   Future<void> ensureReadyForPlatformSpecificTooling() async {
     _regenerateFromTemplateIfNeeded();
-    if (!_flutterLibRoot.existsSync())
-      return;
+    if (!_flutterLibRoot.existsSync()) return;
     await _updateGeneratedXcodeConfigIfNeeded();
   }
 
@@ -280,12 +275,10 @@ class IosProject {
   }
 
   void _regenerateFromTemplateIfNeeded() {
-    if (!isModule)
-      return;
+    if (!isModule) return;
     final bool pubspecChanged = isOlderThanReference(entity: _ephemeralDirectory, referenceFile: parent.pubspecFile);
     final bool toolingChanged = Cache.instance.isOlderThanToolsStamp(_ephemeralDirectory);
-    if (!pubspecChanged && !toolingChanged)
-      return;
+    if (!pubspecChanged && !toolingChanged) return;
     _deleteIfExistsSync(_ephemeralDirectory);
     _overwriteFromTemplate(fs.path.join('module', 'ios', 'library'), _ephemeralDirectory);
     // Add ephemeral host app, if a editable host app does not already exist.
@@ -299,8 +292,7 @@ class IosProject {
 
   Future<void> makeHostAppEditable() async {
     assert(isModule);
-    if (_editableDirectory.existsSync())
-      throwToolExit('iOS host app is already editable. To start fresh, delete the ios/ folder.');
+    if (_editableDirectory.existsSync()) throwToolExit('iOS host app is already editable. To start fresh, delete the ios/ folder.');
     _deleteIfExistsSync(_ephemeralDirectory);
     _overwriteFromTemplate(fs.path.join('module', 'ios', 'library'), _ephemeralDirectory);
     _overwriteFromTemplate(fs.path.join('module', 'ios', 'host_app_ephemeral'), _editableDirectory);
@@ -322,10 +314,7 @@ class IosProject {
     final Template template = Template.fromName(path);
     template.render(
       target,
-      <String, dynamic>{
-        'projectName': parent.manifest.appName,
-        'iosIdentifier': parent.manifest.iosBundleIdentifier
-      },
+      <String, dynamic>{'projectName': parent.manifest.appName, 'iosIdentifier': parent.manifest.iosBundleIdentifier},
       printStatusWhenWriting: false,
       overwriteExisting: true,
     );
@@ -349,8 +338,7 @@ class AndroidProject {
   /// containing the `app/` subdirectory and the `settings.gradle` file that
   /// includes it in the overall Gradle project.
   Directory get hostAppGradleRoot {
-    if (!isModule || _editableHostAppDirectory.existsSync())
-      return _editableHostAppDirectory;
+    if (!isModule || _editableHostAppDirectory.existsSync()) return _editableHostAppDirectory;
     return _ephemeralDirectory;
   }
 
@@ -360,6 +348,7 @@ class AndroidProject {
   Directory get _flutterLibGradleRoot => isModule ? _ephemeralDirectory : _editableHostAppDirectory;
 
   Directory get _ephemeralDirectory => parent.directory.childDirectory('.android');
+
   Directory get _editableHostAppDirectory => parent.directory.childDirectory('android');
 
   /// True if the parent Flutter project is a module.
@@ -411,8 +400,8 @@ class AndroidProject {
   }
 
   bool _shouldRegenerateFromTemplate() {
-    return isOlderThanReference(entity: _ephemeralDirectory, referenceFile: parent.pubspecFile)
-        || Cache.instance.isOlderThanToolsStamp(_ephemeralDirectory);
+    return isOlderThanReference(entity: _ephemeralDirectory, referenceFile: parent.pubspecFile) ||
+        Cache.instance.isOlderThanToolsStamp(_ephemeralDirectory);
   }
 
   Future<void> makeHostAppEditable() async {
@@ -455,10 +444,8 @@ class AndroidProject {
 
 /// Deletes [directory] with all content.
 void _deleteIfExistsSync(Directory directory) {
-  if (directory.existsSync())
-    directory.deleteSync(recursive: true);
+  if (directory.existsSync()) directory.deleteSync(recursive: true);
 }
-
 
 /// Returns the first line-based match for [regExp] in [file].
 ///
